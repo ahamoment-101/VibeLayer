@@ -5,7 +5,6 @@
 - Core runtime: `packages/core/src`
 - Contract CLI: `packages/cli/src`
 - Generic example: `examples/todo-basic`
-- Addio adapter example: `examples/addio-todo-validation`
 - Reliability tests: `tests`
 
 ## Mandatory Rules
@@ -26,14 +25,14 @@
 - Do not apply remote deletes outside conflict middleware.
 - Do not add a mutation without `description` and `affects`.
 - Do not generate a second server ID for an entity created offline.
-- Do not put Addio-specific fields in `packages/core`.
+- Do not put product-specific fields in `packages/core`.
 
 ## Discovery
 
 ```bash
-npm run vibelayer -- list entities --module examples/addio-todo-validation/contract.ts
-npm run vibelayer -- list mutations --module examples/addio-todo-validation/contract.ts
-npm run vibelayer -- explain todo.updateMemo --module examples/addio-todo-validation/contract.ts
+npm run vibelayer -- list entities --module examples/todo-basic/contract.ts
+npm run vibelayer -- list mutations --module examples/todo-basic/contract.ts
+npm run vibelayer -- explain todo.updateMemo --module examples/todo-basic/contract.ts
 ```
 
 ## Verification
@@ -42,8 +41,7 @@ npm run vibelayer -- explain todo.updateMemo --module examples/addio-todo-valida
 npm run typecheck
 npm test
 npm run example:todo
-npm run example:addio
-npm run contract:addio
+npm run contract:todo
 ```
 
 When changing sync behavior, verify at least:

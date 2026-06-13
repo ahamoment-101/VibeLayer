@@ -7,7 +7,7 @@ Implemented prototype.
 ## Boundary
 
 VibeLayer is a local-first middleware, not a database replacement, React
-state library, cache wrapper, or Addio-specific data layer.
+state library, cache wrapper, or product-specific data layer.
 
 ```txt
 UI reads local entities.

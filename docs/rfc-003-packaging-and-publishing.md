@@ -1,10 +1,9 @@
-# RFC 003: Packaging and Repository Extraction
+# RFC 003: Packaging and Publishing
 
 ## Status
 
-Core package is independently buildable and installable. Addio consumes the
-same package artifact through a local file dependency. Canonical repository:
-`https://github.com/ahamoment-101/VibeLayer.git`
+Core and CLI packages are independently buildable and installable. Canonical
+repository: `https://github.com/ahamoment-101/VibeLayer.git`
 
 ## Package Boundaries
 
@@ -20,7 +19,7 @@ Owns only generic runtime behavior:
 - restart recovery
 - diagnostics and Agent contract primitives
 
-It must not contain Addio entities, routes, React, authentication, or backend
+It must not contain product entities, routes, React, authentication, or backend
 models. It has no production dependencies.
 
 ### `vibelayer-cli`
@@ -39,7 +38,7 @@ const items = useLocalEntities(runtime, 'todo', {
 const status = useEntitySyncStatus(runtime, 'todo', todoId);
 ```
 
-It must not know Addio field names or REST routes.
+It must not know consumer field names or REST routes.
 
 ### Consumer Adapter
 
@@ -52,8 +51,8 @@ Each product owns:
 - domain React selectors and hooks
 - server idempotency guarantees
 
-Addio currently keeps this layer in `lib/local-sync`. It can later become an
-example package, but it is not part of Core.
+This layer remains in the consuming application unless multiple products prove
+that a reusable adapter package is warranted.
 
 ## External Installation
 
@@ -83,48 +82,24 @@ does not merge REST responses or maintain a second synchronized entity array.
 
 ## Registry Requirement
 
-Addio should not switch from:
+Consumers should install published registry versions rather than depending on
+the workspace root through Git or a local `file:` path:
 
 ```json
-"vibelayer": "file:VibeLayer/packages/core"
+"vibelayer": "^0.1.0"
 ```
 
-directly to a Git repository dependency on `ahamoment-101/VibeLayer.git`.
+This repository is a workspace root, while the runtime package is
+`packages/core`. Registry publication preserves the intended package boundary.
 
-Reason: this repository is a workspace root. Git dependencies install the
-repository root package, not the `packages/core` workspace package as the app's
-runtime dependency. The correct migration path is:
+## Publishing Sequence
 
-1. publish `vibelayer` to npm or GitHub Packages
-2. publish `vibelayer-cli`
-3. replace Addio's file dependency with a registry version such as
-   `"vibelayer": "^0.1.0"`
-
-## Extraction Sequence
-
-1. Move `VibeLayer` to a standalone repository without changing package
-   names or APIs.
-   Minimal shell sequence:
-
-   ```bash
-   cp -R VibeLayer /tmp/VibeLayer
-   cd /tmp/VibeLayer
-   rm -rf node_modules
-   git init
-   git branch -M main
-   git remote add origin git@github.com:ahamoment-101/VibeLayer.git
-   npm ci
-   npm run verify
-   ```
-
-2. Configure CI to run `npm run verify` on Node 18, 20, and 22.
-3. Publish Core as `0.1.0` under an available npm organization.
-4. Replace Addio's `file:` dependency with the published version.
-5. Publish CLI after Core.
-6. Extract generic React bindings only after two consumers demonstrate the
-   same hook contract.
-7. Keep the Addio adapter in Addio until another product proves which adapter
-   abstractions are genuinely reusable.
+1. Run `npm run verify` on supported Node versions.
+2. Publish `vibelayer`.
+3. Publish `vibelayer-cli` against the same Core version.
+4. Update consuming applications to a registry version.
+5. Extract generic framework bindings only after multiple consumers
+   demonstrate the same contract.
 
 ## Release Gates
 

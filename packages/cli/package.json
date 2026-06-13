@@ -21,8 +21,8 @@
   ],
   "main": "./dist/index.js",
   "bin": {
-    "vibelayer": "./dist/index.js",
-    "localsync": "./dist/index.js"
+    "vibelayer": "dist/index.js",
+    "localsync": "dist/index.js"
   },
   "files": [
     "dist",

@@ -2,9 +2,6 @@
 
 A developer- and Agent-friendly local-first data layer for vibe-coded apps.
 
-This folder is a standalone workspace and can be moved out of Addio into its own
-repository: `https://github.com/ahamoment-101/VibeLayer.git`.
-
 ## Runtime Model
 
 ```txt
@@ -166,7 +163,6 @@ Agent to infer them from implementation code.
 packages/core/                 framework-independent runtime
 packages/cli/                  contract inspection CLI
 examples/todo-basic/           generic example
-examples/addio-todo-validation Addio REST adapter validation
 tests/                         deterministic reliability scenarios
 docs/                          architecture and Agent guidance
 ```
@@ -180,44 +176,15 @@ npm test
 npm run build
 npm run pack:check
 npm run example:todo
-npm run example:addio
+npm run contract:todo
 ```
 
 The runtime has no production dependencies. IndexedDB uses the browser's native
 API.
 
-## Extraction
-
-When you move this folder into its own repository, keep these top-level files:
-
-```txt
-.github/workflows/verify.yml
-.gitignore
-CONTRIBUTING.md
-LICENSE
-README.md
-docs/
-examples/
-packages/
-scripts/
-tests/
-package.json
-package-lock.json
-tsconfig.json
-```
-
-The standalone repository should run `npm run verify` as its default CI gate.
-Consumer-specific integration tests should stay in the consuming application.
-In Addio they live under `tests/vibelayer-consumer/` and run through the same
-Vitest binary without making Core depend on Addio source files.
-
-## Repository Split
-
-The folder can move to a standalone repository without Addio. Keep
-`packages/core`, `packages/cli`, `examples`, `tests`, and `docs`. Addio-specific
-schema, transport, React hooks, and REST mappings remain consumer code and
-should eventually move into a separate example or adapter package such as
-`vibelayer-addio-adapter`.
+Consumer-specific schemas, transports, framework bindings, and integration
+tests belong in the consuming application or a separately published adapter
+package. They should not introduce product-specific dependencies into Core.
 
 Publishing order:
 
