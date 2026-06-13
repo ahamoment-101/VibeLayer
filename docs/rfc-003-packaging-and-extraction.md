@@ -81,6 +81,25 @@ sync/runtime.ts      authenticated client lifecycle
 UI code reads subscribed local entities and invokes named domain commands. It
 does not merge REST responses or maintain a second synchronized entity array.
 
+## Registry Requirement
+
+Addio should not switch from:
+
+```json
+"vibelayer": "file:VibeLayer/packages/core"
+```
+
+directly to a Git repository dependency on `ahamoment-101/VibeLayer.git`.
+
+Reason: this repository is a workspace root. Git dependencies install the
+repository root package, not the `packages/core` workspace package as the app's
+runtime dependency. The correct migration path is:
+
+1. publish `vibelayer` to npm or GitHub Packages
+2. publish `vibelayer-cli`
+3. replace Addio's file dependency with a registry version such as
+   `"vibelayer": "^0.1.0"`
+
 ## Extraction Sequence
 
 1. Move `VibeLayer` to a standalone repository without changing package
