@@ -1,0 +1,44 @@
+{
+  "name": "vibelayer",
+  "version": "0.1.0",
+  "description": "Framework-independent local-first store, durable mutation queue, sync engine, and conflict middleware.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahamoment-101/VibeLayer.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/ahamoment-101/VibeLayer/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/ahamoment-101/VibeLayer/issues"
+  },
+  "keywords": [
+    "local-first",
+    "offline-first",
+    "sync-engine",
+    "conflict-resolution",
+    "agent-friendly",
+    "indexeddb"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.19"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}

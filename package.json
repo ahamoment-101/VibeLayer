@@ -1,0 +1,41 @@
+{
+  "name": "vibelayer-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Developer- and Agent-friendly local-first sync SDK workspace.",
+  "type": "module",
+  "packageManager": "npm@10.9.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahamoment-101/VibeLayer.git"
+  },
+  "homepage": "https://github.com/ahamoment-101/VibeLayer#readme",
+  "bugs": {
+    "url": "https://github.com/ahamoment-101/VibeLayer/issues"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:core": "npm run build --workspace vibelayer",
+    "build": "npm run build --workspace vibelayer && npm run build --workspace vibelayer-cli",
+    "pack:check": "node scripts/check-package-install.mjs",
+    "pretest": "npm run build:core",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "example:todo": "node --import tsx examples/todo-basic/index.ts",
+    "example:addio": "node --import tsx examples/addio-todo-validation/index.ts",
+    "contract:addio": "node --import tsx examples/addio-todo-validation/print-contract.ts",
+    "vibelayer": "node --import tsx packages/cli/src/index.ts",
+    "localsync": "node --import tsx packages/cli/src/index.ts",
+    "verify": "npm run typecheck && npm test && npm run build && npm run pack:check"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "fake-indexeddb": "^6.2.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
