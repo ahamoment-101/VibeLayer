@@ -1,6 +1,7 @@
 # VibeLayer
 
-Framework-independent local-first sync runtime for TypeScript applications.
+Framework-independent local-first sync runtime for TypeScript applications and
+coding agents.
 
 VibeLayer provides:
 

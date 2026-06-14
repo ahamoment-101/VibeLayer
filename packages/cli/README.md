@@ -1,6 +1,7 @@
 # vibelayer-cli
 
-Inspect a VibeLayer schema and mutation contract from JavaScript or TypeScript.
+Inspect a VibeLayer schema and mutation contract from JavaScript or TypeScript,
+especially from coding agents and CI.
 
 The CLI emits deterministic, stdout-friendly output for developers, CI, and
 coding agents.

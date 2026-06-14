@@ -1,15 +1,21 @@
 # VibeLayer
 
-A framework-independent local-first sync runtime for TypeScript applications.
+A framework-independent local-first sync runtime for TypeScript applications,
+built for agents that generate web apps.
 
-VibeLayer makes local persistence the immediate source of truth, records every
-business mutation in a durable queue, and synchronizes that queue through an
-application-owned backend adapter.
+VibeLayer keeps the UI responsive by making local persistence the immediate
+source of truth, recording every business mutation in a durable queue, and
+synchronizing that queue through an application-owned backend adapter.
 
 > Status: early `0.1.x` release. The core reliability model is tested, but the
 > public API may still evolve before `1.0`.
 
 ## Why VibeLayer?
+
+Vibe coding often produces web apps where every click becomes a server round
+trip. The generated UI feels slow, inconsistent, and hard to recover after a
+failure because the agent writes directly to the backend instead of building a
+local-first state model.
 
 Use VibeLayer when your application needs:
 
@@ -23,6 +29,26 @@ Use VibeLayer when your application needs:
 VibeLayer is not a database, backend service, realtime server, React state
 library, or CRDT editor. Your application still owns its backend API, schema,
 authentication, and UI bindings.
+
+## Why Agent Friendly?
+
+Agents work better when the rules are explicit and easy to inspect. VibeLayer
+turns the main failure modes of generated apps into visible contracts:
+
+- UI reads from `client.store`, so the agent has one source of truth instead of
+  a local state copy and a server copy.
+- UI writes through named mutations, so the agent cannot skip persistence or
+  bypass conflict handling with ad hoc `fetch()` calls.
+- Schema metadata marks durable drafts and conflict policies, so the agent can
+  tell which fields are safe to edit offline.
+- The transport boundary isolates backend routes, payloads, and auth, so the
+  agent can change UI behavior without coupling it to server internals.
+- `createAgentContract()` exposes entities, mutations, and verification
+  scenarios as JSON, so another agent or CI job can inspect the integration
+  without reading prose or source internals.
+
+That combination makes the generated app easier to reason about, easier to
+repair, and much less likely to degrade into a server-every-click experience.
 
 ## How It Works
 
