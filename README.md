@@ -7,8 +7,8 @@ VibeLayer keeps the UI responsive by making local persistence the immediate
 source of truth, recording every business mutation in a durable queue, and
 synchronizing that queue through an application-owned backend adapter.
 
-The static launch page lives in `index.html` for GitHub Pages or any other
-plain file host.
+The public launch site now lives in `site/`, which is a separate git repo for
+the landing page and future blog.
 
 > Status: early `0.1.x` release. The core reliability model is tested, but the
 > public API may still evolve before `1.0`.
