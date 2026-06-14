@@ -1,143 +1,166 @@
 # VibeLayer
 
-A developer- and Agent-friendly local-first data layer for vibe-coded apps.
+A framework-independent local-first sync runtime for TypeScript applications.
 
-## Runtime Model
+VibeLayer makes local persistence the immediate source of truth, records every
+business mutation in a durable queue, and synchronizes that queue through an
+application-owned backend adapter.
+
+> Status: early `0.1.x` release. The core reliability model is tested, but the
+> public API may still evolve before `1.0`.
+
+## Why VibeLayer?
+
+Use VibeLayer when your application needs:
+
+- instant local writes that do not wait for the network
+- offline edits that survive page reloads or process restarts
+- ordered retries after network or backend failures
+- explicit conflict policies for user-edited fields
+- an application-specific REST, RPC, or delta sync adapter
+- machine-readable schema and mutation contracts for coding agents
+
+VibeLayer is not a database, backend service, realtime server, React state
+library, or CRDT editor. Your application still owns its backend API, schema,
+authentication, and UI bindings.
+
+## How It Works
 
 ```txt
-UI -> readonly local store
-UI -> named mutation -> atomic local persistence -> durable queue
-                                      |
-                                      v
-                              sync engine -> backend adapter
-                                      |
-                                      v
-                           conflict policy -> local store
+UI reads client.store
+UI writes client.mutate(name, input)
+              |
+              v
+atomic local persistence + durable mutation queue
+              |
+              v
+application transport -> backend API
+              |
+              v
+remote deltas -> conflict policy -> local store
 ```
 
-The UI never waits for the network to display a user edit. The SDK owns retry,
-ordering, remote reconciliation, cursor persistence, and diagnostics.
+The important boundary is simple:
 
-Framework adapters should make the SDK store the only entity source. For React,
-the application pattern is:
+- UI reads synchronized entities from `client.store`.
+- UI writes business intent through named mutations.
+- The transport is the only layer that knows backend routes and payloads.
 
-```tsx
-const { todos, loading, refresh } = useTodos({ projectId });
+## Try It In 60 Seconds
 
-await commands.createTodo(input);
-// Do not append to a component-owned array. The SDK subscription publishes it.
+Requirements: Node.js `18.19` or newer and npm.
+
+```bash
+git clone https://github.com/ahamoment-101/VibeLayer.git
+cd VibeLayer
+npm install
+npm run example:todo
 ```
 
-Components may own transient drafts, selection, focus, and layout. They should
-not own a second mutable copy of synchronized entities or merge network
-responses manually.
+The example performs three local mutations, prints local state before network
+sync, pushes the durable queue through an in-memory transport, and prints the
+resulting server state.
 
-## Quick Start
+Explore the implementation:
 
-Install the runtime:
+- [schema](examples/todo-basic/schema.ts)
+- [named mutations](examples/todo-basic/mutations.ts)
+- [transport adapter](examples/todo-basic/fake-transport.ts)
+- [client setup](examples/todo-basic/index.ts)
+
+## Install
 
 ```bash
 npm install vibelayer
 ```
 
+The four integration pieces are:
+
 ```ts
 import {
   IndexedDbStorageAdapter,
   SyncClient,
-  createResilientInitializer,
   defineMutations,
   defineSchema,
+  type SyncTransport,
 } from 'vibelayer';
+```
 
-const schema = defineSchema({
-  entities: {
-    todo: {
-      conflict: 'fieldLevelMerge',
-      fields: {
-        title: {
-          type: 'string',
-          userEditable: true,
-          durableDraft: true,
-          conflict: 'localDirtyWins',
-        },
-      },
-    },
-  },
+1. Define synchronized entities and field conflict policies.
+2. Define named local mutations.
+3. Implement `SyncTransport` against your backend.
+4. Create one client and subscribe the UI to its store.
+
+Follow the complete, copyable integration in
+[Getting Started](docs/getting-started.md).
+
+## Core Concepts
+
+### Schema
+
+The schema documents entities, durable user-editable fields, and conflict
+policies. It is runtime metadata, not a database schema validator.
+
+### Named Mutations
+
+Every write has a stable name, description, declared effects, and deterministic
+local transaction. A mutation is persisted locally before it is eligible for
+network sync.
+
+### Storage
+
+- `IndexedDbStorageAdapter` provides durable browser persistence.
+- `MemoryStorageAdapter` is ephemeral and intended for tests and examples.
+- Custom adapters should implement atomic `saveState()` for the strongest crash
+  guarantees.
+
+### Transport
+
+Your transport maps queued business mutations to backend requests and maps
+backend responses to normalized remote deltas. Read
+[Writing a Transport Adapter](docs/transport-adapters.md) before integrating a
+production API.
+
+### Conflict Policies
+
+Built-in policies include `remoteWins`, `localWins`, `localDirtyWins`, and
+`fieldLevelMerge`. User drafts typically use `localDirtyWins` so stale remote
+responses cannot overwrite pending local edits.
+
+## Common Operations
+
+```ts
+await client.mutate('todo.updateTitle', {
+  id: 'todo_1',
+  title: 'Local first',
 });
 
-const mutations = defineMutations({
-  'todo.updateTitle': {
-    description: 'Update a todo title.',
-    affects: ['todo.title'],
-    apply({ tx }, input: { id: string; title: string }) {
-      tx.patch('todo', input.id, { title: input.title });
-    },
-  },
-});
-
-const client = await SyncClient.create({
-  schema,
-  mutations,
-  storage: new IndexedDbStorageAdapter({ databaseName: 'my-app' }),
-  transport,
-});
-
-await client.mutate('todo.updateTitle', { id: 'todo_1', title: 'Local first' });
 client.store.get('todo', 'todo_1');
+client.store.list('todo');
+client.store.subscribe(() => render(client.store.getSnapshot()));
+
+await client.sync.push();
+await client.sync.pull();
 await client.sync.syncNow();
-```
+await client.sync.retry();
 
-Application integrations can keep SDK startup recoverable without coupling the
-Core to React or a specific authentication system:
-
-```ts
-const runtime = createResilientInitializer({
-  create: () => createMySyncClient(),
-  shouldRetry: (error) => !isAuthenticationError(error),
-});
-
-runtime.start().catch(() => null);
-const client = await runtime.get(); // user actions retry immediately
-runtime.status(); // idle | initializing | ready | degraded | disposed
-```
-
-`client.store` is read-only at the public type boundary. Writes go through named
-mutations so they cannot bypass persistence and sync.
-
-## Reliability Guarantees
-
-- Local entity and queue changes are atomically persisted by official adapters.
-- Interrupted `syncing` mutations recover as `queued` on restart.
-- Push failures preserve local data and become explicitly retryable.
-- Pull cursors survive restart.
-- Remote deletes go through conflict resolution.
-- Authoritative snapshots can delete missing records within an explicit scope.
-- Initialization failures support automatic backoff and action-triggered retry.
-- Mutation effects identify the exact entity IDs and fields still pending.
-- Creates use client-generated stable IDs and replay through ordinary named
-  mutations; adapters must make remote create endpoints idempotent for those IDs.
-
-Custom storage adapters should implement `saveState()` atomically. Legacy
-adapters without it remain supported but cannot provide the same crash boundary.
-
-## Observability
-
-```ts
 client.sync.status();
 client.sync.inspectQueue();
 client.getEntitySyncState('todo', 'todo_1');
-client.inspect();
-await client.sync.reconcile(alreadyFetchedDeltas);
-await client.sync.reconcileSnapshot('todo', projectTodos, {
+client.diagnostics();
+```
+
+If the application already fetches remote data, use `reconcile()` instead of
+issuing a duplicate pull:
+
+```ts
+await client.sync.reconcile(remoteDeltas, { cursor });
+
+await client.sync.reconcileSnapshot('todo', remoteTodos, {
   deleteMissing: true,
   includeLocal: (todo) => todo.projectId === activeProjectId,
 });
-client.sync.subscribe((event) => console.log(event));
-await client.sync.retry();
 ```
-
-Use `reconcile()` when the consuming application already fetched remote data.
-It applies the same conflict rules without issuing another network request.
 
 ## Agent Tooling
 
@@ -147,50 +170,81 @@ Install the optional contract CLI:
 npm install --save-dev vibelayer-cli
 ```
 
+Export a contract from your schema and mutations:
+
+```ts
+import { createAgentContract } from 'vibelayer';
+import { mutations } from './mutations';
+import { schema } from './schema';
+
+export const contract = createAgentContract(schema, mutations);
+```
+
+Inspect it from a terminal or coding agent:
+
 ```bash
+npx vibelayer inspect --module ./sync/contract.ts
 npx vibelayer list entities --module ./sync/contract.ts
 npx vibelayer list mutations --module ./sync/contract.ts
-npx vibelayer explain todo.updateMemo --module ./sync/contract.ts
+npx vibelayer explain todo.updateTitle --module ./sync/contract.ts
 ```
 
-The generated contract exposes entities, durable drafts, conflict policies,
-mutation capabilities, and required verification scenarios without requiring an
-Agent to infer them from implementation code.
+## Documentation
 
-## Workspace
+- [Getting Started](docs/getting-started.md): complete first integration
+- [Transport Adapters](docs/transport-adapters.md): backend mapping and failure rules
+- [Agent Guide](docs/sync.agent.md): repository rules for coding agents
+- [Core Architecture](docs/rfc-001-core-architecture.md): runtime boundaries
+- [Agent-Friendly SDK](docs/rfc-002-agent-friendly-sdk.md): contract design
+- [Packaging and Publishing](docs/rfc-003-packaging-and-publishing.md): package boundaries
 
-```txt
-packages/core/                 framework-independent runtime
-packages/cli/                  contract inspection CLI
-examples/todo-basic/           generic example
-tests/                         deterministic reliability scenarios
-docs/                          architecture and Agent guidance
-```
+## Reliability Guarantees
 
-## Development
+- Entity changes and queue records are atomically persisted by official adapters.
+- Interrupted `syncing` mutations recover as `queued` after restart.
+- Push failures preserve local data and become explicitly retryable.
+- Pull cursors survive restart.
+- Remote deletes pass through conflict resolution.
+- Push and pull operations are serialized.
+- Queue replay preserves the original client-generated IDs.
+- Mutation effects expose the entity IDs and fields still pending.
+
+Duplicate-free retries depend on the backend preserving client-generated IDs
+and treating repeated creates and deletes idempotently, or providing an explicit
+ID remapping protocol.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| UI reverts after a request | Read from `client.store`; do not merge a second server snapshot into component state. |
+| Local edit disappears after pull | Mark the field `durableDraft: true` and choose an explicit conflict policy. |
+| Queue remains failed | Inspect `client.sync.inspectQueue()`, fix the transport error, then call `client.sync.retry()`. |
+| Create is duplicated after retry | Make the backend create endpoint idempotent for the client-generated ID. |
+| Mutation is rejected locally | Ensure it declares `description`, `affects`, and writes at least one entity. |
+| Data is lost on custom storage failure | Implement atomic `saveState()` instead of separate entity and queue writes. |
+
+## Repository Development
 
 ```bash
 npm install
-npm run typecheck
-npm test
-npm run build
-npm run pack:check
-npm run example:todo
-npm run contract:todo
+npm run verify
 ```
 
-The runtime has no production dependencies. IndexedDB uses the browser's native
-API.
+`npm run verify` runs type checking, deterministic tests, package builds, and a
+real `npm pack` installation smoke test.
 
-Consumer-specific schemas, transports, framework bindings, and integration
-tests belong in the consuming application or a separately published adapter
-package. They should not introduce product-specific dependencies into Core.
+Useful focused commands:
 
-Publishing order:
+```bash
+npm test
+npm run example:todo
+npm run contract:todo
+npm run vibelayer -- list mutations --module examples/todo-basic/contract.ts
+```
 
-1. Publish `vibelayer`.
-2. Publish `vibelayer-cli`, which depends on the same Core version.
-3. In consuming apps, install Core and define the app-owned schema, mutations,
-   transport, runtime singleton, and framework hooks.
-4. Run `npm run verify` before every release. It includes deterministic
-   reliability tests and a real `npm pack` installation smoke test.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before changing runtime behavior.
+
+## License
+
+[MIT](LICENSE)
