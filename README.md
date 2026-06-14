@@ -1,11 +1,15 @@
 # VibeLayer
 
-A framework-independent local-first sync runtime for TypeScript applications,
-built for agents that generate web apps.
+A local-first state layer for TypeScript apps built by coding agents.
 
-VibeLayer keeps the UI responsive by making local persistence the immediate
-source of truth, recording every business mutation in a durable queue, and
-synchronizing that queue through an application-owned backend adapter.
+VibeLayer stops agent-generated apps from scattering `fetch()` calls across
+components, making every click wait for the server, and losing local edits
+when the network fails.
+
+UI reads from `client.store`.
+UI writes through named mutations.
+VibeLayer persists local state + mutation queue first, then syncs through your
+backend adapter.
 
 The public launch site now lives in `site/`, which is a separate git repo for
 the landing page and future blog.
