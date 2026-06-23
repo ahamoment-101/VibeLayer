@@ -180,6 +180,7 @@ await client.sync.retry();
 client.sync.status();
 client.sync.inspectQueue();
 client.getEntitySyncState('todo', 'todo_1');
+client.getEntitySyncInfo('todo', 'todo_1');
 client.diagnostics();
 ```
 
@@ -187,13 +188,26 @@ If the application already fetches remote data, use `reconcile()` instead of
 issuing a duplicate pull:
 
 ```ts
-await client.sync.reconcile(remoteDeltas, { cursor });
+const result = await client.sync.reconcile(remoteDeltas, { cursor });
 
-await client.sync.reconcileSnapshot('todo', remoteTodos, {
+const snapshotResult = await client.sync.reconcileSnapshot('todo', remoteTodos, {
   deleteMissing: true,
   includeLocal: (todo) => todo.projectId === activeProjectId,
 });
+
+const canonicalTodo = result.entities.todo?.todo_1;
+const canonicalProjectTodos = snapshotResult.entities.todo || {};
+render(client.store.getSnapshot());
 ```
+
+Both reconcile methods return the canonical records affected by that operation
+after conflict resolution. Read specific affected records from the result, or
+render the full application state from `client.store`; do not continue rendering
+the raw REST response because it may contain fields older than pending local
+edits.
+
+`getEntitySyncInfo(entity, id)` returns the entity state, dirty fields, effects,
+and mutation IDs without requiring consumers to scan the mutation queue.
 
 ## Agent Tooling
 

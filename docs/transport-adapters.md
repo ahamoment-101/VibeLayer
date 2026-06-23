@@ -129,7 +129,10 @@ async pull(request: PullRequest): Promise<PullResult> {
 
 The cursor is persisted by the storage adapter and supplied to the next pull.
 If the application already fetches remote data, omit `pull()` and call
-`client.sync.reconcile()` or `reconcileSnapshot()`.
+`client.sync.reconcile()` or `reconcileSnapshot()`. Both methods return the
+canonical affected records after conflict resolution. Consumers should render
+those records or read from `client.store`, never continue with the raw REST
+snapshot.
 
 ## Stable IDs and Idempotency
 

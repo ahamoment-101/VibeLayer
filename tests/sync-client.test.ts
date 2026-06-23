@@ -4,7 +4,7 @@ import {
   SyncClient,
   defineMutations,
   defineSchema,
-} from '../packages/core/src/index';
+} from 'vibelayer';
 import { sequentialIds, TestTransport } from './helpers';
 
 const schema = defineSchema({
@@ -77,6 +77,17 @@ describe('SyncClient reliability', () => {
       operation: 'upsert',
       fields: ['title', 'memo', 'status'],
     }]);
+    expect(client.getEntitySyncInfo('todo', 'todo_1')).toEqual({
+      state: 'queued',
+      dirtyFields: ['title', 'memo', 'status'],
+      effects: [{
+        entity: 'todo',
+        id: 'todo_1',
+        operation: 'upsert',
+        fields: ['title', 'memo', 'status'],
+      }],
+      mutationIds: ['mutation_1'],
+    });
   });
 
   it('exposes redacted diagnostics without mutation inputs or entity bodies', async () => {
@@ -166,7 +177,7 @@ describe('SyncClient reliability', () => {
   it('reconciles already-fetched remote data without an extra pull', async () => {
     const { client, transport } = await createClient();
 
-    await client.sync.reconcile([{
+    const result = await client.sync.reconcile([{
       entity: 'todo',
       id: 'todo_1',
       op: 'upsert',
@@ -179,6 +190,8 @@ describe('SyncClient reliability', () => {
     }]);
 
     expect(client.store.get('todo', 'todo_1')?.title).toBe('Existing remote todo');
+    expect(result.entities.todo.todo_1.title).toBe('Existing remote todo');
+    expect(result.deleted).toEqual([]);
     expect(transport.pulls).toEqual([]);
   });
 
@@ -252,6 +265,12 @@ describe('SyncClient reliability', () => {
       'todo.updateMemo',
     ]);
     expect(client.sync.inspectQueue()).toEqual([]);
+    expect(client.getEntitySyncInfo('todo', 'todo_1')).toEqual({
+      state: 'clean',
+      dirtyFields: [],
+      effects: [],
+      mutationIds: [],
+    });
   });
 
   it('does not let an older in-flight response overwrite a newer local edit', async () => {
@@ -358,6 +377,59 @@ describe('SyncClient reliability', () => {
       memo: '',
       status: 'completed',
     });
+  });
+
+  it('returns canonical records after reconciling a stale REST snapshot', async () => {
+    const { client } = await createClient();
+    await client.sync.reconcile([{
+      entity: 'todo',
+      id: 'todo_1',
+      op: 'upsert',
+      data: {
+        id: 'todo_1',
+        title: 'Original',
+        memo: '',
+        status: 'pending',
+      },
+    }]);
+    await client.mutate('todo.updateMemo', { id: 'todo_1', memo: 'Latest local memo' });
+
+    const result = await client.sync.reconcileSnapshot('todo', [{
+      id: 'todo_1',
+      title: 'Updated remotely',
+      memo: 'Stale remote memo',
+      status: 'completed',
+    }]);
+
+    expect(result.entities.todo.todo_1).toEqual({
+      id: 'todo_1',
+      title: 'Updated remotely',
+      memo: 'Latest local memo',
+      status: 'completed',
+    });
+    expect(client.getEntitySyncInfo('todo', 'todo_1')).toMatchObject({
+      state: 'queued',
+      dirtyFields: ['memo'],
+    });
+  });
+
+  it('reports canonical deletions from reconcile results', async () => {
+    const { client } = await createClient();
+    await client.sync.reconcile([{
+      entity: 'todo',
+      id: 'todo_1',
+      op: 'upsert',
+      data: { id: 'todo_1', title: 'Delete remotely' },
+    }]);
+
+    const result = await client.sync.reconcile([{
+      entity: 'todo',
+      id: 'todo_1',
+      op: 'delete',
+    }]);
+
+    expect(result.entities.todo).toBeUndefined();
+    expect(result.deleted).toEqual([{ entity: 'todo', id: 'todo_1' }]);
   });
 
   it('does not apply a remote delete over protected local dirty fields', async () => {

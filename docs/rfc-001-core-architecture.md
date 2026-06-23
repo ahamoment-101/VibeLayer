@@ -104,6 +104,11 @@ This allows incremental adoption without adding duplicate GET requests. The
 operation is serialized with push/pull, uses normal conflict middleware, and
 rolls back its in-memory changes if durable persistence fails.
 
+`reconcile()` and `reconcileSnapshot()` return the canonical affected records
+after conflict resolution plus explicit deleted entity references. Consumers
+must render that result or read from the local store instead of continuing to
+render the raw remote snapshot.
+
 ## ID Rule
 
 New entities use client-generated stable IDs. The backend must preserve those

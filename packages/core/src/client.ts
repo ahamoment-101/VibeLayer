@@ -5,6 +5,7 @@ import { persistSyncState } from './storage.js';
 import { EntityStore, type ReadonlyEntityStore } from './store.js';
 import { SyncEngine } from './sync-engine.js';
 import type {
+  EntitySyncInfo,
   EntitySyncState,
   MutationDefinition,
   MutationInput,
@@ -187,6 +188,15 @@ export class SyncClient<TMutations extends MutationRegistry = MutationRegistry> 
 
   getEntitySyncState(entity: string, id: string): EntitySyncState {
     return this.queue.entityState(entity, id);
+  }
+
+  getEntitySyncInfo(entity: string, id: string): EntitySyncInfo {
+    return {
+      state: this.queue.entityState(entity, id),
+      dirtyFields: [...this.queue.dirtyFields(entity, id)],
+      effects: this.queue.effectsFor(entity, id),
+      mutationIds: this.queue.mutationIdsFor(entity, id),
+    };
   }
 
   async remapEntityId(

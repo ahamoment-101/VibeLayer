@@ -60,6 +60,10 @@ consume it without scraping prose.
 - unknown conflict policies explain where to register the handler.
 - push errors state that local data remains queued.
 - runtime mutation effects are inspectable.
+- entity sync state, dirty fields, effects, and mutation IDs are available
+  through `client.getEntitySyncInfo(entity, id)`.
+- reconcile operations return canonical post-conflict records so generated
+  integrations do not need to manually merge stale REST snapshots.
 
 These constraints turn common architectural mistakes into immediate,
 actionable failures.

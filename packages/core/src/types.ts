@@ -36,6 +36,13 @@ export type MutationRecord<TInput = unknown> = {
   effects: MutationEffect[];
 };
 
+export type EntitySyncInfo = {
+  state: EntitySyncState;
+  dirtyFields: string[];
+  effects: MutationEffect[];
+  mutationIds: string[];
+};
+
 export type DeltaOperation = 'upsert' | 'patch' | 'delete';
 
 export type RemoteDelta = {
@@ -66,6 +73,11 @@ export type PullRequest = {
 export type PullResult = {
   cursor?: string | number | null;
   deltas: RemoteDelta[];
+};
+
+export type ReconcileResult = {
+  entities: EntitySnapshot;
+  deleted: Array<{ entity: EntityName; id: EntityId }>;
 };
 
 export type SyncTransport = {

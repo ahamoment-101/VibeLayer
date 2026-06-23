@@ -6,6 +6,7 @@ import type {
   EntityRecord,
   MutationRecord,
   PullResult,
+  ReconcileResult,
   RemoteDelta,
   StorageAdapter,
   StorageMeta,
@@ -70,7 +71,7 @@ export class SyncEngine {
   reconcile(
     deltas: RemoteDelta[],
     options: { cursor?: string | number | null } = {},
-  ): Promise<void> {
+  ): Promise<ReconcileResult> {
     return this.runExclusive(async () => {
       const previousEntities = this.options.store.getSnapshot();
       const previousMutations = this.options.queue.all();
@@ -84,6 +85,7 @@ export class SyncEngine {
           cursor: this.meta.cursor ?? null,
           lastError: null,
         });
+        return this.buildReconcileResult(deltas);
       } catch (error) {
         this.options.store.replaceSnapshot(previousEntities);
         this.options.queue.replace(previousMutations);
@@ -104,7 +106,7 @@ export class SyncEngine {
       deleteMissing?: boolean;
       includeLocal?: (record: EntityRecord) => boolean;
     } = {},
-  ): Promise<void> {
+  ): Promise<ReconcileResult> {
     const remoteIds = new Set(records.map((record) => String(record.id)));
     const deltas: RemoteDelta[] = records.map((record) => ({
       entity,
@@ -299,6 +301,29 @@ export class SyncEngine {
       this.options.store.upsert(delta.entity, resolution.value);
     }
     this.emit({ type: 'delta-applied', delta, resolution: resolution.action });
+  }
+
+  private buildReconcileResult(deltas: RemoteDelta[]): ReconcileResult {
+    const entities: ReconcileResult['entities'] = {};
+    const deleted: ReconcileResult['deleted'] = [];
+    const seen = new Set<string>();
+
+    for (const delta of deltas) {
+      const key = JSON.stringify([delta.entity, delta.id]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const record = this.options.store.get(delta.entity, delta.id);
+      if (!record) {
+        deleted.push({ entity: delta.entity, id: delta.id });
+        continue;
+      }
+      entities[delta.entity] = {
+        ...(entities[delta.entity] || {}),
+        [delta.id]: record,
+      };
+    }
+
+    return { entities, deleted };
   }
 
   private runExclusive<T>(operation: () => Promise<T>): Promise<T> {

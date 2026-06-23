@@ -78,6 +78,18 @@ client.store.list('todo');
 await client.sync.push();
 ```
 
+When integrating an existing REST fetch, reconcile the response and render the
+canonical local result:
+
+```ts
+const result = await client.sync.reconcileSnapshot('todo', remoteTodos);
+const canonicalTodo = result.entities.todo?.todo_1;
+const syncInfo = client.getEntitySyncInfo('todo', 'todo_1');
+```
+
+`syncInfo` exposes the entity state, dirty fields, effects, and mutation IDs.
+For full application rendering, subscribe to `client.store`.
+
 Use `IndexedDbStorageAdapter` for durable browser persistence. Production
 transports must map named mutations to your backend and make offline creates
 idempotent.

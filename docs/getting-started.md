@@ -239,7 +239,7 @@ await client.sync.pull();
 If your application already fetched data, reconcile it without another request:
 
 ```ts
-await client.sync.reconcile([
+const result = await client.sync.reconcile([
   {
     entity: 'todo',
     id: remoteTodo.id,
@@ -248,7 +248,14 @@ await client.sync.reconcile([
     version: remoteTodo.updatedAt,
   },
 ]);
+
+const canonicalTodo = result.entities.todo?.todo_1;
 ```
+
+Reconcile results contain only records affected by that operation, after
+conflict resolution. Render full application state from `client.store`, and use
+`client.getEntitySyncInfo(entity, id)` when the UI needs sync state, dirty
+fields, effects, or mutation IDs.
 
 ## 7. Handle Failures
 
