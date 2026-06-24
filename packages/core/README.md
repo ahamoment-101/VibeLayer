@@ -74,8 +74,16 @@ await client.mutate('todo.create', {
   title: 'Local first',
 });
 
-client.store.list('todo');
+const pendingTodos = client.query('todo', {
+  where: { status: 'pending' },
+});
+
+const unsubscribe = pendingTodos.subscribe((todos) => {
+  renderTodos(todos);
+});
+
 await client.sync.push();
+unsubscribe();
 ```
 
 When integrating an existing REST fetch, reconcile the response and render the
@@ -88,7 +96,9 @@ const syncInfo = client.getEntitySyncInfo('todo', 'todo_1');
 ```
 
 `syncInfo` exposes the entity state, dirty fields, effects, and mutation IDs.
-For full application rendering, subscribe to `client.store`.
+For full application rendering, subscribe to `client.store`. For filtered
+views, use `client.query()` so local mutations and remote reconcile results
+automatically move records into or out of the rendered list.
 
 Use `IndexedDbStorageAdapter` for durable browser persistence. Production
 transports must map named mutations to your backend and make offline creates

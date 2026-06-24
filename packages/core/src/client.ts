@@ -1,5 +1,6 @@
 import { ConflictResolver, type ConflictPolicyRegistry } from './conflict.js';
 import { MutationQueue } from './mutation-queue.js';
+import { EntityQuery, type EntityQueryOptions } from './query.js';
 import { defineSchema, type SyncSchema } from './schema.js';
 import { persistSyncState } from './storage.js';
 import { EntityStore, type ReadonlyEntityStore } from './store.js';
@@ -197,6 +198,10 @@ export class SyncClient<TMutations extends MutationRegistry = MutationRegistry> 
       effects: this.queue.effectsFor(entity, id),
       mutationIds: this.queue.mutationIdsFor(entity, id),
     };
+  }
+
+  query(entity: string, options: EntityQueryOptions = {}): EntityQuery {
+    return new EntityQuery(this.store, entity, options);
   }
 
   async remapEntityId(

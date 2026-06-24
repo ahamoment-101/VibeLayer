@@ -177,6 +177,24 @@ This adapter sends queued business mutations and returns normalized deltas. For
 production requirements, including retry and conflict handling, read
 [Transport Adapters](transport-adapters.md).
 
+Production transports must treat `mutation.id` as an idempotency key. Ack only
+after the backend has durably committed the write and recorded that mutation ID.
+If the same mutation arrives again after a network failure, return the same ack
+and canonical delta instead of applying the write twice.
+
+For a complete backend reference, read
+[`examples/todo-basic/reference-server.ts`](../examples/todo-basic/reference-server.ts).
+It separates server responsibilities from the client transport adapter:
+
+- the server records processed mutation IDs per client
+- the server applies writes in request order
+- the server appends canonical deltas to a change log
+- the server serves pull requests by persisted cursor
+- the transport only calls `server.push()` and `server.pull()`
+
+In production, store the business write, processed mutation ID, and change-log
+entry in one database transaction.
+
 ## 4. Create the Client
 
 Create `sync/client.ts`:
@@ -202,13 +220,20 @@ new client for each component or request.
 
 ## 5. Read and Write From the UI
 
-The UI should subscribe to the store and write through named mutations:
+The UI should read from the local store and write through named mutations. For
+whole-app rendering, subscribe to `client.store`. For filtered views such as
+project lists, kanban columns, inboxes, folders, or status buckets, prefer
+`client.query()`:
 
 ```ts
 const client = await clientPromise;
 
-const unsubscribe = client.store.subscribe(() => {
-  const todos = client.store.list('todo');
+const pendingTodos = client.query('todo', {
+  where: { status: 'pending' },
+  sort: (left, right) => String(left.title).localeCompare(String(right.title)),
+});
+
+const unsubscribe = pendingTodos.subscribe((todos) => {
   renderTodos(todos);
 });
 
@@ -226,7 +251,10 @@ unsubscribe();
 ```
 
 Do not append the new todo to a separate component-owned synchronized array.
-The local mutation updates `client.store` before `client.mutate()` resolves.
+The local mutation updates `client.store` before `client.mutate()` resolves, and
+live queries update immediately when a record enters or leaves their filter.
+For example, if a todo moves from `status: "pending"` to `status: "done"`, the
+pending query removes it without waiting for the backend response.
 
 ## 6. Pull or Reconcile Remote Data
 
@@ -257,6 +285,11 @@ conflict resolution. Render full application state from `client.store`, and use
 `client.getEntitySyncInfo(entity, id)` when the UI needs sync state, dirty
 fields, effects, or mutation IDs.
 
+If the reconciled records affect a live query, the query subscriber runs after
+the store update. Do not keep rendering the raw REST array; render from
+`client.query()` or `client.store` so local dirty fields and canonical conflict
+results are preserved.
+
 ## 7. Handle Failures
 
 ```ts
@@ -273,14 +306,39 @@ durable queue with a `failed` state until retry.
 
 ## Integration Checklist
 
+- Schema is lightweight sync metadata, not a replacement for backend
+  validation.
 - UI reads synchronized entities only from `client.store`.
+- Filtered UI reads should use `client.query()` instead of component-owned
+  synchronized arrays.
 - UI writes only through `client.mutate()`.
 - Creates use client-generated stable IDs.
 - Backend create endpoints are idempotent for those IDs.
 - Every user-editable draft has an explicit conflict policy.
-- Transport acknowledges or rejects every pushed mutation.
+- Transport acknowledges or rejects every pushed mutation exactly once.
+- Transport returns minimal canonical deltas rather than broad stale snapshots.
 - Custom storage implements atomic `saveState()`.
 - Offline, restart, retry, stale response, and delete paths have tests.
+
+## Agent Handoff Notes
+
+When handing a VibeLayer integration to a coding agent, include:
+
+- schema file path
+- mutation registry file path
+- transport adapter file path
+- reference backend or backend route file path
+- UI components that subscribe to `client.store`
+- backend endpoints that receive pushed mutations
+- verification commands
+
+Tell the agent to inspect the contract before editing:
+
+```bash
+npm run vibelayer -- list entities --module ./sync/contract.ts
+npm run vibelayer -- list mutations --module ./sync/contract.ts
+npm run vibelayer -- explain todo.rename --module ./sync/contract.ts
+```
 
 ## Next Steps
 

@@ -79,6 +79,31 @@ The important boundary is simple:
 - UI writes business intent through named mutations.
 - The transport is the only layer that knows backend routes and payloads.
 
+## Reliability Model
+
+VibeLayer is intentionally schema-light and transport-explicit:
+
+- Schema is runtime metadata for entities, durable draft fields, and conflict
+  policies. It is not a database validator and does not replace your backend
+  schema.
+- Local mutations are persisted and replayed in order. Push, pull, reconcile,
+  and retry operations are serialized inside the client.
+- Transports return normalized deltas: `upsert`, `patch`, or `delete`. Return
+  the smallest confirmed backend change you can, especially for stale REST
+  responses.
+- Every pushed mutation must be accounted for exactly once: either in
+  `ackedMutationIds` after durable backend commit, or in `rejected` with an
+  explicit error. Unknown, duplicate, or contradictory acknowledgements fail
+  retryably.
+- Create and delete endpoints should be idempotent for client-generated IDs
+  because the server may commit before the client receives the ack.
+- UI framework adapters should subscribe to `client.store` and call
+  `client.mutate()`. Framework bindings are integration code; they should not
+  bypass the queue, conflict middleware, or transport boundary.
+
+The current core is client/server local-first sync middleware. It does not try
+to be a decentralized database, realtime coordinator, or CRDT layer.
+
 ## Try It In 60 Seconds
 
 Requirements: Node.js `18.19` or newer and npm.
@@ -98,6 +123,7 @@ Explore the implementation:
 
 - [schema](examples/todo-basic/schema.ts)
 - [named mutations](examples/todo-basic/mutations.ts)
+- [reference sync server](examples/todo-basic/reference-server.ts)
 - [transport adapter](examples/todo-basic/fake-transport.ts)
 - [client setup](examples/todo-basic/index.ts)
 
@@ -122,7 +148,7 @@ import {
 1. Define synchronized entities and field conflict policies.
 2. Define named local mutations.
 3. Implement `SyncTransport` against your backend.
-4. Create one client and subscribe the UI to its store.
+4. Create one client and render live queries from the local store.
 
 Follow the complete, copyable integration in
 [Getting Started](docs/getting-started.md).
@@ -172,6 +198,12 @@ client.store.get('todo', 'todo_1');
 client.store.list('todo');
 client.store.subscribe(() => render(client.store.getSnapshot()));
 
+const pendingTodos = client.query('todo', {
+  where: { status: 'pending' },
+  sort: (left, right) => String(left.title).localeCompare(String(right.title)),
+});
+pendingTodos.subscribe((todos) => renderTodoList(todos));
+
 await client.sync.push();
 await client.sync.pull();
 await client.sync.syncNow();
@@ -208,6 +240,13 @@ edits.
 
 `getEntitySyncInfo(entity, id)` returns the entity state, dirty fields, effects,
 and mutation IDs without requiring consumers to scan the mutation queue.
+
+`client.query(entity, options)` returns a live filtered projection over the
+local store. Use it for project lists, kanban columns, inbox filters, folders,
+or any UI that renders a subset of an entity type. Local mutations, remote
+reconcile results, deletes, and rollbacks all update the query because it is
+derived from `client.store`. This avoids the common bug where a business
+mutation updates the entity but a filtered UI keeps rendering a stale array.
 
 ## Agent Tooling
 

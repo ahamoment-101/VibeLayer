@@ -2,6 +2,7 @@ export * from './agent-contract.js';
 export * from './client.js';
 export * from './conflict.js';
 export * from './mutation-queue.js';
+export * from './query.js';
 export * from './resilient-initializer.js';
 export * from './schema.js';
 export * from './storage-memory.js';

@@ -42,8 +42,14 @@ type PushResult = {
 - Add failures to `rejected`; use `conflict: true` for manual conflict handling.
 - Return canonical backend state as `deltas`.
 - Do not silently omit a mutation. Unaccounted mutations are marked failed.
+- Do not acknowledge IDs that were not in the request.
+- Do not acknowledge and reject the same mutation.
+- Do not acknowledge a mutation more than once in the same response.
 
 VibeLayer preserves mutation order within each push batch.
+
+VibeLayer validates this accounting before it mutates the queue. Invalid
+transport responses fail the in-flight records retryably, preserving local data.
 
 ## Mapping Business Mutations
 
@@ -111,6 +117,17 @@ const deleted: RemoteDelta = {
 Return only fields confirmed by the backend. A broad stale snapshot can
 unnecessarily invoke conflict resolution for unrelated fields.
 
+`upsert` deltas must include `data`; `patch` deltas must include `patch`;
+`delete` deltas only need `entity`, `id`, and optional `version`.
+
+For existing REST APIs, do not guess a patch by diffing arbitrary UI state.
+Prefer one of these sources:
+
+- the canonical record returned by the write endpoint
+- a server-side change log
+- a deliberately scoped REST snapshot projected into field patches
+- the mutation's declared business effect when the backend confirms success
+
 ## Pull Contract
 
 Implement `pull()` when the transport owns remote fetching:
@@ -152,6 +169,30 @@ before the client receives the response, so retries must not create duplicates.
 If the backend cannot preserve IDs, call `client.remapEntityId()` with a
 `rewriteMutation` function that also updates pending references. Explicit
 remapping is safer than silently replacing IDs in transport responses.
+
+The server should store processed mutation IDs per client or per authenticated
+sync actor. If a retry repeats a mutation that was already committed, return
+the same acknowledgement and canonical delta instead of applying it again.
+
+A minimal server-side push transaction should do this:
+
+1. authenticate the sync actor
+2. load each mutation ID in request order
+3. skip and acknowledge already-processed IDs
+4. validate authorization and current server state
+5. commit the business write and processed mutation ID atomically
+6. append a canonical change-log entry
+7. return exactly one ack or rejection for each pushed mutation
+
+The Todo example includes a copyable in-memory reference server:
+
+- [reference-server.ts](../examples/todo-basic/reference-server.ts) owns
+  processed mutation IDs, ordered writes, canonical deltas, and cursor pull.
+- [fake-transport.ts](../examples/todo-basic/fake-transport.ts) is only the
+  client-side adapter that calls that server.
+
+Use that split in real applications: server code owns idempotency and change
+logs; transport code only maps VibeLayer requests to your backend protocol.
 
 ## Authentication
 
@@ -201,7 +242,11 @@ return {
 - Pull cursors are monotonic or otherwise safe to persist and resume.
 - Authentication expiry produces a clear retry or reinitialization path.
 - Offline-after-commit retries do not duplicate writes.
+- Server-committed but client-unacknowledged mutations are acknowledged on
+  retry without applying the write again.
 - Tests cover mixed success, rejection, thrown network errors, and stale deltas.
 
-See [examples/todo-basic/fake-transport.ts](../examples/todo-basic/fake-transport.ts)
-for a small complete implementation.
+See [examples/todo-basic/reference-server.ts](../examples/todo-basic/reference-server.ts)
+for the backend reference and
+[examples/todo-basic/fake-transport.ts](../examples/todo-basic/fake-transport.ts)
+for the matching client transport.

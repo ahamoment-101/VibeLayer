@@ -181,6 +181,7 @@ export class SyncEngine {
         clientId: this.options.clientId,
         mutations: this.options.queue.all().filter((record) => mutationIds.includes(record.id)),
       });
+      this.validatePushResult(result, mutationIds);
 
       const ackedIds = result.ackedMutationIds.filter((id) => mutationIds.includes(id));
       const rejectedIds = new Set((result.rejected || []).map((item) => item.mutationId));
@@ -247,6 +248,7 @@ export class SyncEngine {
         clientId: this.options.clientId,
         cursor: this.meta.cursor ?? null,
       });
+      this.validateDeltas(result.deltas, 'pull result');
       for (const delta of result.deltas) this.applyDelta(delta);
       this.meta.cursor = result.cursor ?? this.meta.cursor ?? null;
       await this.persistAll();
@@ -286,6 +288,92 @@ export class SyncEngine {
     });
 
     this.applyResolution(delta, resolution);
+  }
+
+  private validatePushResult(result: unknown, mutationIds: string[]): asserts result is {
+    ackedMutationIds: string[];
+    rejected?: Array<{ mutationId: string; error: string; conflict?: boolean }>;
+    deltas?: RemoteDelta[];
+  } {
+    if (!result || typeof result !== 'object') {
+      throw new Error('Transport push returned an invalid result object.');
+    }
+
+    const pushResult = result as {
+      ackedMutationIds?: unknown;
+      rejected?: unknown;
+      deltas?: unknown;
+    };
+    if (!Array.isArray(pushResult.ackedMutationIds)) {
+      throw new Error('Transport push result must include ackedMutationIds as an array.');
+    }
+
+    const pushedIds = new Set(mutationIds);
+    const seenAcked = new Set<string>();
+    for (const id of pushResult.ackedMutationIds) {
+      if (typeof id !== 'string' || !pushedIds.has(id)) {
+        throw new Error(`Transport acknowledged unknown mutation "${String(id)}".`);
+      }
+      if (seenAcked.has(id)) {
+        throw new Error(`Transport acknowledged mutation "${id}" more than once.`);
+      }
+      seenAcked.add(id);
+    }
+
+    if (pushResult.rejected !== undefined && !Array.isArray(pushResult.rejected)) {
+      throw new Error('Transport push result rejected field must be an array when provided.');
+    }
+
+    const seenRejected = new Set<string>();
+    for (const rejection of pushResult.rejected || []) {
+      if (!rejection || typeof rejection !== 'object') {
+        throw new Error('Transport rejection entries must be objects.');
+      }
+      const item = rejection as { mutationId?: unknown; error?: unknown };
+      if (typeof item.mutationId !== 'string' || !pushedIds.has(item.mutationId)) {
+        throw new Error(`Transport rejected unknown mutation "${String(item.mutationId)}".`);
+      }
+      if (seenAcked.has(item.mutationId)) {
+        throw new Error(`Transport both acknowledged and rejected mutation "${item.mutationId}".`);
+      }
+      if (seenRejected.has(item.mutationId)) {
+        throw new Error(`Transport rejected mutation "${item.mutationId}" more than once.`);
+      }
+      if (typeof item.error !== 'string' || !item.error) {
+        throw new Error(`Transport rejection for mutation "${item.mutationId}" must include an error string.`);
+      }
+      seenRejected.add(item.mutationId);
+    }
+
+    this.validateDeltas(pushResult.deltas || [], 'push result');
+  }
+
+  private validateDeltas(deltas: unknown, source: string): asserts deltas is RemoteDelta[] {
+    if (!Array.isArray(deltas)) {
+      throw new Error(`Transport ${source} deltas must be an array.`);
+    }
+
+    for (const delta of deltas) {
+      if (!delta || typeof delta !== 'object') {
+        throw new Error(`Transport ${source} contains a non-object delta.`);
+      }
+      const item = delta as Partial<RemoteDelta>;
+      if (typeof item.entity !== 'string' || !item.entity) {
+        throw new Error(`Transport ${source} delta must include an entity string.`);
+      }
+      if (typeof item.id !== 'string' || !item.id) {
+        throw new Error(`Transport ${source} delta must include an id string.`);
+      }
+      if (item.op !== 'upsert' && item.op !== 'patch' && item.op !== 'delete') {
+        throw new Error(`Transport ${source} delta for "${item.entity}:${item.id}" has an invalid op.`);
+      }
+      if (item.op === 'upsert' && (!item.data || typeof item.data !== 'object')) {
+        throw new Error(`Transport ${source} upsert delta for "${item.entity}:${item.id}" must include data.`);
+      }
+      if (item.op === 'patch' && (!item.patch || typeof item.patch !== 'object')) {
+        throw new Error(`Transport ${source} patch delta for "${item.entity}:${item.id}" must include patch.`);
+      }
+    }
   }
 
   private applyResolution(delta: RemoteDelta, resolution: ConflictResolution): void {

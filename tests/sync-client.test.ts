@@ -37,6 +37,13 @@ const mutations = defineMutations({
       tx.patch('todo', input.id, { memo: input.memo });
     },
   },
+  'todo.updateStatus': {
+    description: 'Move a todo between filtered workflow views.',
+    affects: ['todo.status'],
+    apply({ tx }, input: { id: string; status: string }) {
+      tx.patch('todo', input.id, { status: input.status });
+    },
+  },
   'todo.delete': {
     description: 'Delete a todo.',
     affects: ['todo'],
@@ -88,6 +95,44 @@ describe('SyncClient reliability', () => {
       }],
       mutationIds: ['mutation_1'],
     });
+  });
+
+  it('keeps live filtered queries in sync with local mutations and reconciles', async () => {
+    const { client } = await createClient();
+    const pendingTodos = client.query('todo', {
+      where: { status: 'pending' },
+      sort: (left, right) => String(left.title).localeCompare(String(right.title)),
+    });
+    const snapshots: string[][] = [];
+    const unsubscribe = pendingTodos.subscribe((records) => {
+      snapshots.push(records.map((record) => String(record.id)));
+    });
+
+    expect(pendingTodos.list()).toEqual([]);
+    expect(snapshots).toEqual([[]]);
+
+    await client.mutate('todo.create', { id: 'todo_b', title: 'Beta' });
+    await client.mutate('todo.create', { id: 'todo_a', title: 'Alpha' });
+
+    expect(pendingTodos.list().map((record) => record.id)).toEqual(['todo_a', 'todo_b']);
+    expect(snapshots.at(-1)).toEqual(['todo_a', 'todo_b']);
+
+    await client.mutate('todo.updateStatus', { id: 'todo_a', status: 'done' });
+
+    expect(pendingTodos.list().map((record) => record.id)).toEqual(['todo_b']);
+    expect(snapshots.at(-1)).toEqual(['todo_b']);
+
+    await client.sync.reconcileSnapshot('todo', [{
+      id: 'todo_c',
+      title: 'Charlie',
+      memo: '',
+      status: 'pending',
+    }], { deleteMissing: false });
+
+    expect(pendingTodos.list().map((record) => record.id)).toEqual(['todo_b', 'todo_c']);
+    expect(snapshots.at(-1)).toEqual(['todo_b', 'todo_c']);
+
+    unsubscribe();
   });
 
   it('exposes redacted diagnostics without mutation inputs or entity bodies', async () => {
@@ -271,6 +316,60 @@ describe('SyncClient reliability', () => {
       effects: [],
       mutationIds: [],
     });
+  });
+
+  it('fails retryably when transport acknowledges an unknown mutation', async () => {
+    const { client, transport } = await createClient();
+    await client.mutate('todo.create', { id: 'todo_1', title: 'Bad ack' });
+    transport.push = async (request) => ({
+      ackedMutationIds: [request.mutations[0].id, 'not_pushed'],
+    });
+
+    await expect(client.sync.push()).rejects.toThrow('acknowledged unknown mutation');
+
+    expect(client.store.get('todo', 'todo_1')?.title).toBe('Bad ack');
+    expect(client.getEntitySyncState('todo', 'todo_1')).toBe('failed');
+    expect(client.sync.inspectQueue()[0].error).toContain('acknowledged unknown mutation');
+
+    transport.push = async (request) => ({
+      ackedMutationIds: request.mutations.map((mutation) => mutation.id),
+    });
+    await client.sync.retry();
+    expect(client.getEntitySyncState('todo', 'todo_1')).toBe('clean');
+  });
+
+  it('fails retryably when transport both acknowledges and rejects one mutation', async () => {
+    const { client, transport } = await createClient();
+    await client.mutate('todo.create', { id: 'todo_1', title: 'Bad accounting' });
+    transport.push = async (request) => ({
+      ackedMutationIds: [request.mutations[0].id],
+      rejected: [{
+        mutationId: request.mutations[0].id,
+        error: 'validation failed',
+      }],
+    });
+
+    await expect(client.sync.push()).rejects.toThrow('both acknowledged and rejected');
+
+    expect(client.getEntitySyncState('todo', 'todo_1')).toBe('failed');
+  });
+
+  it('fails retryably when transport returns malformed deltas', async () => {
+    const { client, transport } = await createClient();
+    await client.mutate('todo.create', { id: 'todo_1', title: 'Bad delta' });
+    transport.push = async (request) => ({
+      ackedMutationIds: [request.mutations[0].id],
+      deltas: [{
+        entity: 'todo',
+        id: 'todo_1',
+        op: 'patch',
+      } as any],
+    });
+
+    await expect(client.sync.push()).rejects.toThrow('must include patch');
+
+    expect(client.store.get('todo', 'todo_1')?.title).toBe('Bad delta');
+    expect(client.getEntitySyncState('todo', 'todo_1')).toBe('failed');
   });
 
   it('does not let an older in-flight response overwrite a newer local edit', async () => {

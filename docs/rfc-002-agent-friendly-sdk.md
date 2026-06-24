@@ -64,6 +64,9 @@ consume it without scraping prose.
   through `client.getEntitySyncInfo(entity, id)`.
 - reconcile operations return canonical post-conflict records so generated
   integrations do not need to manually merge stale REST snapshots.
+- `client.query(entity, { where, sort })` gives generated UI adapters a live
+  filtered projection, so agents do not need to invent component-local list
+  patching after a mutation moves a record between scopes.
 
 These constraints turn common architectural mistakes into immediate,
 actionable failures.
