@@ -1,0 +1,43 @@
+name: publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run verify
+      - name: Publish core SDK
+        run: |
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          if npm view "vibelayer@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "vibelayer@$VERSION already exists; skipping."
+          else
+            npm publish --workspace vibelayer --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish CLI
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          if npm view "vibelayer-cli@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "vibelayer-cli@$VERSION already exists; skipping."
+          else
+            npm publish --workspace vibelayer-cli --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

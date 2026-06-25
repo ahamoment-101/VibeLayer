@@ -94,6 +94,31 @@ This repository is a workspace root, while the runtime package is
 
 ## Publishing Sequence
 
+The default publishing path is GitHub Actions. Store an npm automation or
+granular access token with publish rights as the repository secret
+`NPM_TOKEN`. The token should be created with permission to bypass publish 2FA
+so maintainers and agents do not need to handle one-time passwords locally.
+
+Release from a clean main branch:
+
+```bash
+npm run verify
+git tag v0.1.2
+git push origin main --tags
+```
+
+The `publish` workflow runs `npm ci`, `npm run verify`, then publishes
+`vibelayer` before `vibelayer-cli`. Publishing Core first is required because
+the CLI depends on the exact Core version. Each publish step is idempotent: if
+that exact package version already exists on npm, the workflow skips it and
+continues to the next package. This lets maintainers recover from partial
+releases, such as Core being published while CLI is still pending.
+
+Manual fallback from the Actions tab is also supported through
+`workflow_dispatch` after package versions have been committed.
+
+Manual local publishing remains possible when needed:
+
 1. Run `npm run verify` on supported Node versions.
 2. Publish `vibelayer`.
 3. Publish `vibelayer-cli` against the same Core version.

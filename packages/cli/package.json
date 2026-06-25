@@ -1,6 +1,6 @@
 {
   "name": "vibelayer-cli",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Agent-friendly contract inspection CLI for VibeLayer.",
   "type": "module",
   "repository": {
@@ -33,8 +33,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "vibelayer": "0.1.0",
-    "tsx": "^4.22.4"
+    "tsx": "^4.22.4",
+    "vibelayer": "0.1.2"
   },
   "engines": {
     "node": ">=18.19"
